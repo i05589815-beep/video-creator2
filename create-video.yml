@@ -1,0 +1,45 @@
+name: Create Video from Image and Audio
+
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  create-video:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+      
+    - name: Extract URLs from issue body
+      id: extract_urls
+      run: |
+        # Extract URLs from issue body
+        BODY="${{ github.event.issue.body }}"
+        IMAGE_URL=$(echo "$BODY" | grep 'image_url:' | cut -d: -f2- | tr -d ' ')
+        AUDIO_URL=$(echo "$BODY" | grep 'audio_url:' | cut -d: -f2- | tr -d ' ')
+        echo "image_url=$IMAGE_URL" >> $GITHUB_OUTPUT
+        echo "audio_url=$AUDIO_URL" >> $GITHUB_OUTPUT
+        
+    - name: Setup FFmpeg
+      run: sudo apt-get install -y ffmpeg
+      
+    - name: Download files
+      run: |
+        wget "${{ steps.extract_urls.outputs.image_url }}" -O image.jpg
+        wget "${{ steps.extract_urls.outputs.audio_url }}" -O audio.mp3
+        
+    - name: Create video
+      run: |
+        ffmpeg -loop 1 -i image.jpg -i audio.mp3 \
+        -c:v libx264 -tune stillimage -c:a aac \
+        -b:a 192k -pix_fmt yuv420p -shortest \
+        -vf "scale=1280:720" \
+        output.mp4
+        
+    - name: Upload to Google Drive
+      uses: satackey/action-google-drive-upload@v1.2.1
+      with:
+        destination: 'videos/'
+        file: 'output.mp4'
+        oauth_service_account: ${{ secrets.GOOGLE_SERVICE_ACCOUNT }}
