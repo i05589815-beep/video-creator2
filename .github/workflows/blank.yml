@@ -1,0 +1,54 @@
+name: Create Video from Image and Audio
+
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  create-video:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+      
+    - name: Extract URLs from issue body
+      id: extract_urls
+      run: |
+        # Extract URLs from issue body
+        BODY="${{ github.event.issue.body }}"
+        IMAGE_URL=$(echo "$BODY" | grep 'image_url:' | cut -d: -f2- | tr -d ' ')
+        AUDIO_URL=$(echo "$BODY" | grep 'audio_url:' | cut -d: -f2- | tr -d ' ')
+        echo "image_url=$IMAGE_URL" >> $GITHUB_OUTPUT
+        echo "audio_url=$AUDIO_URL" >> $GITHUB_OUTPUT
+        echo "Extracted image URL: $IMAGE_URL"
+        echo "Extracted audio URL: $AUDIO_URL"
+        
+    - name: Setup FFmpeg
+      run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      
+    - name: Download files
+      run: |
+        echo "Downloading image from: ${{ steps.extract_urls.outputs.image_url }}"
+        wget -q "${{ steps.extract_urls.outputs.image_url }}" -O image.jpg
+        echo "Downloading audio from: ${{ steps.extract_urls.outputs.audio_url }}"
+        wget -q "${{ steps.extract_urls.outputs.audio_url }}" -O audio.mp3
+        echo "Files downloaded:"
+        ls -la
+        
+    - name: Create video
+      run: |
+        echo "Creating video with FFmpeg..."
+        ffmpeg -loop 1 -i image.jpg -i audio.mp3 \
+        -c:v libx264 -tune stillimage -c:a aac \
+        -b:a 192k -pix_fmt yuv420p -shortest \
+        -vf "scale=1280:720" \
+        -y output.mp4
+        echo "Video created. File info:"
+        ls -la output.mp4
+        file output.mp4
+        
+    - name: Upload artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: video
+        path: output.mp4
